@@ -156,6 +156,24 @@ export function ExternalAIAnalysisDrawer({ source, getPayload, disabled }: Exter
     }
   };
 
+  const handleDownloadPdf = () => {
+    if (result?.analysisText) {
+      try {
+        generateAnalysisPdfReport({
+          analysisText: result.analysisText,
+          aiName: displayAiName,
+          model: result.model,
+          date: new Date().toISOString(),
+          trialCount: sentPayload?.data?.length || 0,
+        });
+        toast.success('PDF generado');
+      } catch (err) {
+        console.error('PDF generation error:', err);
+        toast.error('Error al generar PDF');
+      }
+    }
+  };
+
   const handleCopyJson = async () => {
     if (sentPayload) {
       await navigator.clipboard.writeText(JSON.stringify(sentPayload, null, 2));
