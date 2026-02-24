@@ -249,7 +249,7 @@ Deno.serve(async (req) => {
     const EXTERNAL_AI_URL = Deno.env.get('EXTERNAL_AI_URL');
     const EXTERNAL_AI_KEY = Deno.env.get('EXTERNAL_AI_KEY');
     const EXTERNAL_AI_MODEL = Deno.env.get('EXTERNAL_AI_MODEL') || 'claude-sonnet-4-5';
-    const EXTERNAL_AI_TIMEOUT_MS = parseInt(Deno.env.get('EXTERNAL_AI_TIMEOUT_MS') || '60000');
+    const EXTERNAL_AI_TIMEOUT_MS = parseInt(Deno.env.get('EXTERNAL_AI_TIMEOUT_MS') || '120000');
     const EXTERNAL_AI_NAME = Deno.env.get('EXTERNAL_AI_NAME') || 'IA Externa';
     
     // Parse and validate request body
