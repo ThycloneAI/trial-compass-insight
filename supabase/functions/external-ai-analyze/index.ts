@@ -208,16 +208,21 @@ function trimPayloadForAI(payload: any): any {
     data: payload.data.map((trial: any) => ({
       nctId: trial.nctId,
       briefTitle: trial.briefTitle,
+      officialTitle: trial.officialTitle,
       phase: trial.phase,
       overallStatus: trial.overallStatus,
+      studyType: trial.studyType,
       conditions: trial.conditions,
       arms: trial.arms,
       interventions: trial.interventions,
       primaryOutcomes: trial.primaryOutcomes,
       enrollmentCount: trial.enrollmentCount,
+      leadSponsor: trial.leadSponsor,
+      startDate: trial.startDate,
+      completionDate: trial.completionDate,
       briefSummary: trial.briefSummary ? trial.briefSummary.slice(0, 200) : undefined,
       secondaryOutcomes: Array.isArray(trial.secondaryOutcomes) 
-        ? trial.secondaryOutcomes.map((o: any) => ({ measure: o.measure, timeFrame: o.timeFrame }))
+        ? trial.secondaryOutcomes.map((o: any) => ({ measure: o.measure, timeFrame: o.timeFrame, classification: o.classification }))
         : undefined,
     }))
   };
