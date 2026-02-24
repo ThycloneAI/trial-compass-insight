@@ -477,98 +477,147 @@ Deno.serve(async (req) => {
     // Trim payload to reduce token count
     const trimmedPayload = trimPayloadForAI(payload);
 
-    // Detect provider and build request accordingly
+    // --- Attempt 1: Primary AI (Claude/configured provider) with 60s timeout ---
     const isAnthropic = isAnthropicAPI(EXTERNAL_AI_URL);
-    let requestConfig: { headers: Record<string, string>; body: string };
+    const PRIMARY_TIMEOUT_MS = 60_000; // 60 seconds for primary
     
-    if (isAnthropic) {
-      requestConfig = buildAnthropicRequest(EXTERNAL_AI_KEY, EXTERNAL_AI_MODEL, mode, sanitizedInstructions, trimmedPayload);
-      log.info('calling_anthropic', { model: EXTERNAL_AI_MODEL, mode });
-    } else {
-      requestConfig = buildGenericRequest(EXTERNAL_AI_KEY, mode, sanitizedInstructions, source, trimmedPayload);
-      log.info('calling_generic_ai', { mode });
-    }
-
-    // Call external AI API with timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), EXTERNAL_AI_TIMEOUT_MS);
-
-    let externalResponse: Response;
-    let externalStatus: number;
     let analysisText: string;
     let analysisJson: any = null;
+    let externalStatus: number;
+    let usedModel = isAnthropic ? EXTERNAL_AI_MODEL : 'configured-provider';
+    let usedFallback = false;
 
-    try {
-      externalResponse = await fetch(EXTERNAL_AI_URL, {
-        method: 'POST',
-        headers: requestConfig.headers,
-        body: requestConfig.body,
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-      externalStatus = externalResponse.status;
-
-      if (!externalResponse.ok) {
-        const errorText = await externalResponse.text();
-        log.error('external_ai_error', { status: externalStatus, snippet: errorText.slice(0, 200) });
-        
-        // Determine error source
-        const errorSource = externalStatus >= 400 && externalStatus < 500 
-          ? 'external_ai_client_error' 
-          : externalStatus >= 500 
-            ? 'external_ai_server_error' 
-            : 'network_error';
-        
-        return new Response(
-          JSON.stringify({ 
-            error: 'External AI error',
-            errorSource,
-            status: externalStatus,
-            message: `Error del proveedor de IA (${externalStatus})`,
-            externalErrorSnippet: errorText.slice(0, 500)
-          }),
-          { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      const externalData = await externalResponse.json();
-      
-      // Parse response based on provider
+    const tryPrimaryAI = async (): Promise<{ text: string; json?: any; status: number } | null> => {
+      let requestConfig: { headers: Record<string, string>; body: string };
       if (isAnthropic) {
-        const parsed = parseAnthropicResponse(externalData);
-        analysisText = parsed.text;
-        analysisJson = parsed.json || null;
+        requestConfig = buildAnthropicRequest(EXTERNAL_AI_KEY, EXTERNAL_AI_MODEL, mode, sanitizedInstructions, trimmedPayload);
+        log.info('calling_anthropic', { model: EXTERNAL_AI_MODEL, mode });
       } else {
-        const parsed = parseGenericResponse(externalData);
-        analysisText = parsed.text;
-        analysisJson = parsed.json;
+        requestConfig = buildGenericRequest(EXTERNAL_AI_KEY, mode, sanitizedInstructions, source, trimmedPayload);
+        log.info('calling_generic_ai', { mode });
       }
 
-    } catch (fetchError: any) {
-      clearTimeout(timeoutId);
-      
-      if (fetchError.name === 'AbortError') {
-        return new Response(
-          JSON.stringify({ 
-            error: 'External AI timeout',
-            errorSource: 'timeout',
-            message: `La petición expiró después de ${EXTERNAL_AI_TIMEOUT_MS / 1000} segundos`
-          }),
-          { status: 504, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), PRIMARY_TIMEOUT_MS);
+
+      try {
+        const resp = await fetch(EXTERNAL_AI_URL, {
+          method: 'POST',
+          headers: requestConfig.headers,
+          body: requestConfig.body,
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+
+        if (!resp.ok) {
+          const errorText = await resp.text();
+          log.warn('primary_ai_error', { status: resp.status, snippet: errorText.slice(0, 200) });
+          return null; // Fall through to fallback
+        }
+
+        const data = await resp.json();
+        if (isAnthropic) {
+          const parsed = parseAnthropicResponse(data);
+          return { text: parsed.text, json: parsed.json || null, status: resp.status };
+        } else {
+          const parsed = parseGenericResponse(data);
+          return { text: parsed.text, json: parsed.json, status: resp.status };
+        }
+      } catch (err: any) {
+        clearTimeout(timeoutId);
+        if (err.name === 'AbortError') {
+          log.warn('primary_ai_timeout', { timeoutMs: PRIMARY_TIMEOUT_MS });
+          return null; // Fall through to fallback
+        }
+        log.warn('primary_ai_fetch_error', { error: err.message });
+        return null;
       }
-      
-      log.error('fetch_error', { error: fetchError.message });
+    };
+
+    // --- Attempt 2: Lovable AI Gateway (Gemini 2.5 Flash) as fallback ---
+    const tryFallbackAI = async (): Promise<{ text: string; json?: any; status: number } | null> => {
+      const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+      if (!LOVABLE_API_KEY) {
+        log.warn('fallback_skipped', { reason: 'LOVABLE_API_KEY not available' });
+        return null;
+      }
+
+      log.info('calling_fallback_gemini', { model: 'google/gemini-2.5-flash', mode });
+
+      let userContent = RESIDENT_PROMPT;
+      if (sanitizedInstructions) {
+        userContent += `\n\nInstrucciones adicionales del usuario:\n${sanitizedInstructions}`;
+      }
+      userContent += `\n\nJSON a analizar:\n${JSON.stringify(trimmedPayload, null, 2)}`;
+
+      const maxTokens = mode === 'advanced' ? 8192 : 2500;
+      const FALLBACK_TIMEOUT_MS = 60_000;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), FALLBACK_TIMEOUT_MS);
+
+      try {
+        const resp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'google/gemini-2.5-flash',
+            messages: [
+              { role: 'user', content: userContent }
+            ],
+            max_tokens: maxTokens,
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+
+        if (!resp.ok) {
+          const errorText = await resp.text();
+          log.error('fallback_ai_error', { status: resp.status, snippet: errorText.slice(0, 200) });
+          return null;
+        }
+
+        const data = await resp.json();
+        const content = data.choices?.[0]?.message?.content;
+        if (content) {
+          return { text: content, status: resp.status };
+        }
+        return null;
+      } catch (err: any) {
+        clearTimeout(timeoutId);
+        log.error('fallback_ai_fetch_error', { error: err.message });
+        return null;
+      }
+    };
+
+    // Execute: primary first, then fallback if needed
+    let aiResult = await tryPrimaryAI();
+    
+    if (!aiResult) {
+      log.info('attempting_fallback');
+      aiResult = await tryFallbackAI();
+      if (aiResult) {
+        usedFallback = true;
+        usedModel = 'google/gemini-2.5-flash (fallback)';
+      }
+    }
+
+    if (!aiResult) {
       return new Response(
-        JSON.stringify({ 
-          error: 'Network error',
-          errorSource: 'network',
-          message: `Error de red: ${fetchError.message}`
+        JSON.stringify({
+          error: 'AI analysis failed',
+          errorSource: 'timeout',
+          message: 'Ambos proveedores de IA agotaron el tiempo de espera o fallaron. Intente con menos ensayos o modo básico.'
         }),
-        { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 504, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    analysisText = aiResult.text;
+    analysisJson = aiResult.json || null;
+    externalStatus = aiResult.status;
 
     const durationMs = Date.now() - startTime;
 
