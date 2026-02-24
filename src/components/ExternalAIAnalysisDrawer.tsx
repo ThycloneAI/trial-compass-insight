@@ -473,8 +473,8 @@ export function ExternalAIAnalysisDrawer({ source, getPayload, disabled }: Exter
               {status === 'sending' && (
                 <div className="flex flex-col items-center justify-center py-16">
                   <Loader2 className="h-12 w-12 animate-spin text-primary mb-6" />
-                  <p className="text-lg text-muted-foreground">Analizando con IA externa...</p>
-                  <p className="text-sm text-muted-foreground mt-2">Esto puede tomar hasta 30 segundos</p>
+                  <p className="text-lg text-muted-foreground">Analizando con IA...</p>
+                  <p className="text-sm text-muted-foreground mt-2">Esto puede tomar hasta 2 minutos</p>
                 </div>
               )}
 
