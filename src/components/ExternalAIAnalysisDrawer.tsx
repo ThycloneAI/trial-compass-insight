@@ -204,6 +204,8 @@ export function ExternalAIAnalysisDrawer({ source, getPayload, disabled }: Exter
     let listItems: JSX.Element[] = [];
     let inList = false;
     let listType: 'ul' | 'ol' = 'ul';
+    let tableRows: string[][] = [];
+    let inTable = false;
 
     const flushList = () => {
       if (listItems.length > 0) {
@@ -217,9 +219,78 @@ export function ExternalAIAnalysisDrawer({ source, getPayload, disabled }: Exter
       }
     };
 
+    const flushTable = () => {
+      if (tableRows.length > 0) {
+        const headerRow = tableRows[0];
+        const bodyRows = tableRows.slice(1);
+        elements.push(
+          <div key={`table-${elements.length}`} className="my-4 overflow-x-auto rounded-lg border border-border">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-muted/70">
+                  {headerRow.map((cell, ci) => (
+                    <th key={ci} className="px-3 py-2 text-left font-semibold text-foreground border-b border-border whitespace-nowrap"
+                      dangerouslySetInnerHTML={{ __html: cell.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {bodyRows.map((row, ri) => (
+                  <tr key={ri} className={ri % 2 === 0 ? 'bg-background' : 'bg-muted/30'}>
+                    {row.map((cell, ci) => (
+                      <td key={ci} className="px-3 py-1.5 text-muted-foreground border-b border-border/50"
+                        dangerouslySetInnerHTML={{ __html: cell.replace(/\*\*(.*?)\*\*/g, '<strong class="text-foreground">$1</strong>') }} />
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+        tableRows = [];
+        inTable = false;
+      }
+    };
+
+    const parseTableRow = (line: string): string[] | null => {
+      if (!line.trim().startsWith('|') || !line.trim().endsWith('|')) return null;
+      const cells = line.trim().slice(1, -1).split('|').map(c => c.trim());
+      return cells;
+    };
+
+    const isSeparatorRow = (cells: string[]): boolean => {
+      return cells.every(c => /^[-:]+$/.test(c.trim()));
+    };
+
     lines.forEach((line, i) => {
       const trimmedLine = line.trim();
-      
+
+      // Table rows
+      const tableCells = parseTableRow(trimmedLine);
+      if (tableCells) {
+        flushList();
+        if (!inTable) {
+          inTable = true;
+          tableRows = [];
+        }
+        if (!isSeparatorRow(tableCells)) {
+          tableRows.push(tableCells);
+        }
+        return;
+      }
+
+      // End table if we were in one
+      if (inTable) {
+        flushTable();
+      }
+
+      // Horizontal rule
+      if (/^-{3,}$/.test(trimmedLine) || /^\*{3,}$/.test(trimmedLine) || /^_{3,}$/.test(trimmedLine)) {
+        flushList();
+        elements.push(<Separator key={i} className="my-6" />);
+        return;
+      }
+
       // Headers
       if (trimmedLine.startsWith('### ')) {
         flushList();
@@ -296,6 +367,7 @@ export function ExternalAIAnalysisDrawer({ source, getPayload, disabled }: Exter
     });
 
     flushList();
+    flushTable();
     return elements;
   };
 
