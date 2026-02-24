@@ -422,7 +422,7 @@ Deno.serve(async (req) => {
       requestConfig = buildAnthropicRequest(EXTERNAL_AI_KEY, EXTERNAL_AI_MODEL, mode, sanitizedInstructions, trimmedPayload);
       log.info('calling_anthropic', { model: EXTERNAL_AI_MODEL, mode });
     } else {
-      requestConfig = buildGenericRequest(EXTERNAL_AI_KEY, mode, sanitizedInstructions, source, payload);
+      requestConfig = buildGenericRequest(EXTERNAL_AI_KEY, mode, sanitizedInstructions, source, trimmedPayload);
       log.info('calling_generic_ai', { mode });
     }
 
