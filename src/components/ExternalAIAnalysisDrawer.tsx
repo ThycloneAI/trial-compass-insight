@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Brain, Copy, Check, ChevronDown, ChevronUp, Loader2, AlertCircle, Clock, Globe, Play, X, Download } from "lucide-react";
+import { Brain, Copy, Check, ChevronDown, ChevronUp, Loader2, AlertCircle, Clock, Globe, Play, X, Download, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import { analyzeWithExternalAI, ExternalAIAnalysisResult, checkExternalAIConfigured } from "@/lib/api";
+import { generateAnalysisPdfReport } from "@/lib/pdfReport";
 
 interface ExternalAIAnalysisDrawerProps {
   source: 'pubmed_json' | 'trial_json' | 'custom';
