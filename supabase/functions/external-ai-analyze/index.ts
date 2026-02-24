@@ -411,12 +411,15 @@ Deno.serve(async (req) => {
       window_start: new Date().toISOString()
     }, { onConflict: 'ip_address,endpoint' });
 
+    // Trim payload to reduce token count
+    const trimmedPayload = trimPayloadForAI(payload);
+
     // Detect provider and build request accordingly
     const isAnthropic = isAnthropicAPI(EXTERNAL_AI_URL);
     let requestConfig: { headers: Record<string, string>; body: string };
     
     if (isAnthropic) {
-      requestConfig = buildAnthropicRequest(EXTERNAL_AI_KEY, EXTERNAL_AI_MODEL, mode, sanitizedInstructions, payload);
+      requestConfig = buildAnthropicRequest(EXTERNAL_AI_KEY, EXTERNAL_AI_MODEL, mode, sanitizedInstructions, trimmedPayload);
       log.info('calling_anthropic', { model: EXTERNAL_AI_MODEL, mode });
     } else {
       requestConfig = buildGenericRequest(EXTERNAL_AI_KEY, mode, sanitizedInstructions, source, payload);
