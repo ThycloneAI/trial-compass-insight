@@ -143,6 +143,31 @@ function hashPayload(payload: any, mode: string, userInstructions: string): stri
   return `external_ai_${Math.abs(hash).toString(16)}`;
 }
 
+// Trim payload to reduce token count for AI analysis
+function trimPayloadForAI(payload: any): any {
+  if (!payload?.data || !Array.isArray(payload.data)) return payload;
+  
+  const trimmed = {
+    ...payload,
+    data: payload.data.map((trial: any) => ({
+      nctId: trial.nctId,
+      briefTitle: trial.briefTitle,
+      phase: trial.phase,
+      overallStatus: trial.overallStatus,
+      conditions: trial.conditions,
+      arms: trial.arms,
+      interventions: trial.interventions,
+      primaryOutcomes: trial.primaryOutcomes,
+      enrollmentCount: trial.enrollmentCount,
+      briefSummary: trial.briefSummary ? trial.briefSummary.slice(0, 200) : undefined,
+      secondaryOutcomes: Array.isArray(trial.secondaryOutcomes) 
+        ? trial.secondaryOutcomes.map((o: any) => ({ measure: o.measure, timeFrame: o.timeFrame }))
+        : undefined,
+    }))
+  };
+  return trimmed;
+}
+
 // Detect if URL is Anthropic API
 function isAnthropicAPI(url: string): boolean {
   return url.includes('api.anthropic.com');
