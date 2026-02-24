@@ -604,3 +604,309 @@ export function generateTrialPdfReport(data: PdfReportData): void {
 
   doc.save(`TrialCompass_${trial.nctId}_Report.pdf`);
 }
+
+// ============= AI ANALYSIS PDF REPORT =============
+
+export interface AnalysisPdfReportData {
+  analysisText: string;
+  aiName: string;
+  model?: string;
+  date: string;
+  trialCount: number;
+}
+
+export function generateAnalysisPdfReport(data: AnalysisPdfReportData): void {
+  const { analysisText, aiName, model, date, trialCount } = data;
+  const doc = new jsPDF('p', 'mm', 'a4');
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 15;
+  const contentWidth = pageWidth - margin * 2;
+  let y = margin;
+
+  // ---- HELPERS ----
+
+  function checkPageBreak(requiredSpace: number) {
+    if (y + requiredSpace > pageHeight - 20) {
+      doc.addPage();
+      y = margin;
+      drawHeader();
+    }
+  }
+
+  function drawHeader() {
+    doc.setFontSize(7);
+    doc.setTextColor(...COLORS.textMuted);
+    doc.text('PICO Intelligence Report — Trial Compass', margin, 8);
+    doc.text(new Date(date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }), pageWidth - margin, 8, { align: 'right' });
+    doc.setDrawColor(...COLORS.border);
+    doc.line(margin, 10, pageWidth - margin, 10);
+    y = 15;
+  }
+
+  function drawFooter(pageNum: number, totalPages: number) {
+    doc.setFontSize(7);
+    doc.setTextColor(...COLORS.textMuted);
+    doc.text(`Page ${pageNum} of ${totalPages}`, pageWidth / 2, pageHeight - 8, { align: 'center' });
+    doc.text('Trial Compass — AI-Generated Report', margin, pageHeight - 8);
+  }
+
+  function pdfSectionTitle(title: string) {
+    checkPageBreak(15);
+    y += 4;
+    doc.setFillColor(...COLORS.primary);
+    doc.rect(margin, y, contentWidth, 8, 'F');
+    doc.setFontSize(11);
+    doc.setTextColor(...COLORS.white);
+    doc.setFont('helvetica', 'bold');
+    doc.text(title.toUpperCase(), margin + 3, y + 5.5);
+    doc.setFont('helvetica', 'normal');
+    y += 12;
+  }
+
+  function pdfSubTitle(title: string) {
+    checkPageBreak(10);
+    y += 2;
+    doc.setFontSize(10);
+    doc.setTextColor(...COLORS.primary);
+    doc.setFont('helvetica', 'bold');
+    doc.text(title, margin, y);
+    doc.setFont('helvetica', 'normal');
+    doc.setDrawColor(...COLORS.accent);
+    doc.line(margin, y + 1.5, margin + contentWidth * 0.3, y + 1.5);
+    y += 6;
+  }
+
+  function pdfText(text: string, fontSize = 8.5) {
+    if (!text) return;
+    checkPageBreak(8);
+    // Strip markdown bold for PDF
+    const clean = text.replace(/\*\*(.*?)\*\*/g, '$1');
+    doc.setFontSize(fontSize);
+    doc.setTextColor(...COLORS.text);
+    const lines = doc.splitTextToSize(clean, contentWidth - 2);
+    for (const line of lines) {
+      checkPageBreak(5);
+      doc.text(line, margin + 1, y);
+      y += 3.8;
+    }
+    y += 1;
+  }
+
+  function pdfBullet(text: string) {
+    checkPageBreak(6);
+    const clean = text.replace(/\*\*(.*?)\*\*/g, '$1');
+    doc.setFontSize(8.5);
+    doc.setTextColor(...COLORS.textMuted);
+    doc.text('•', margin + 2, y);
+    doc.setTextColor(...COLORS.text);
+    const lines = doc.splitTextToSize(clean, contentWidth - 10);
+    for (let li = 0; li < lines.length; li++) {
+      checkPageBreak(5);
+      doc.text(lines[li], margin + 6, y);
+      y += 3.8;
+    }
+  }
+
+  function pdfTable(headers: string[], rows: string[][]) {
+    checkPageBreak(15 + rows.length * 6);
+    autoTable(doc, {
+      startY: y,
+      head: [headers],
+      body: rows,
+      theme: 'grid',
+      headStyles: {
+        fillColor: COLORS.primary,
+        textColor: COLORS.white,
+        fontSize: 7.5,
+        fontStyle: 'bold',
+        cellPadding: 2,
+      },
+      bodyStyles: {
+        fontSize: 7,
+        cellPadding: 1.5,
+        textColor: COLORS.text,
+      },
+      alternateRowStyles: {
+        fillColor: COLORS.lightBg,
+      },
+      margin: { left: margin, right: margin },
+      didDrawPage: () => { drawHeader(); },
+    });
+    y = (doc as any).lastAutoTable.finalY + 5;
+  }
+
+  // ---- COVER PAGE ----
+
+  doc.setFillColor(...COLORS.primary);
+  doc.rect(0, 0, pageWidth, 85, 'F');
+
+  doc.setFontSize(10);
+  doc.setTextColor(200, 210, 230);
+  doc.text('TRIAL COMPASS', margin, 20);
+
+  doc.setFontSize(22);
+  doc.setTextColor(...COLORS.white);
+  doc.setFont('helvetica', 'bold');
+  doc.text('PICO Intelligence Report', margin, 38);
+  doc.setFont('helvetica', 'normal');
+
+  doc.setFontSize(12);
+  doc.setTextColor(200, 220, 255);
+  doc.text('AI-Powered Clinical Trial Analysis', margin, 50);
+
+  doc.setFontSize(10);
+  doc.text(`${trialCount} trials analyzed`, margin, 62);
+
+  y = 95;
+  doc.setFontSize(9);
+  doc.setTextColor(...COLORS.text);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Report Details', margin, y);
+  doc.setFont('helvetica', 'normal');
+  y += 7;
+
+  const metaItems = [
+    ['AI Service', aiName || 'IA'],
+    ['Model', model || 'N/A'],
+    ['Generated', new Date(date).toLocaleString('en-US', { dateStyle: 'full', timeStyle: 'short' })],
+    ['Trials Analyzed', String(trialCount)],
+  ];
+
+  doc.setFillColor(...COLORS.lightBg);
+  doc.roundedRect(margin, y, contentWidth, metaItems.length * 7 + 4, 2, 2, 'F');
+  let metaY = y + 5;
+  for (const [label, value] of metaItems) {
+    doc.setFontSize(8.5);
+    doc.setTextColor(...COLORS.textMuted);
+    doc.setFont('helvetica', 'bold');
+    doc.text(label, margin + 4, metaY);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...COLORS.text);
+    doc.text(value, margin + 45, metaY);
+    metaY += 7;
+  }
+  y = metaY + 8;
+
+  // Disclaimer
+  doc.setFillColor(254, 243, 199);
+  doc.roundedRect(margin, y, contentWidth, 14, 1.5, 1.5, 'F');
+  doc.setFontSize(7);
+  doc.setTextColor(146, 64, 14);
+  doc.setFont('helvetica', 'bold');
+  doc.text('DISCLAIMER', margin + 3, y + 4);
+  doc.setFont('helvetica', 'normal');
+  doc.text('This report is AI-generated from structured clinical trial data. It does not substitute professional', margin + 3, y + 7.5);
+  doc.text('technical assessment. Content should be validated by qualified HTA/regulatory professionals.', margin + 3, y + 10.5);
+
+  // ---- PARSE AND RENDER MARKDOWN ----
+
+  doc.addPage();
+  drawHeader();
+
+  const mdLines = analysisText.split('\n');
+  let tableHeaders: string[] | null = null;
+  let tableBody: string[][] = [];
+  let inMdTable = false;
+
+  const flushMdTable = () => {
+    if (tableHeaders && tableBody.length > 0) {
+      pdfTable(tableHeaders, tableBody);
+    }
+    tableHeaders = null;
+    tableBody = [];
+    inMdTable = false;
+  };
+
+  const parseMdTableRow = (line: string): string[] | null => {
+    const t = line.trim();
+    if (!t.startsWith('|') || !t.endsWith('|')) return null;
+    return t.slice(1, -1).split('|').map(c => c.trim().replace(/\*\*(.*?)\*\*/g, '$1'));
+  };
+
+  const isMdSeparator = (cells: string[]): boolean => cells.every(c => /^[-:]+$/.test(c.trim()));
+
+  for (let i = 0; i < mdLines.length; i++) {
+    const line = mdLines[i];
+    const trimmed = line.trim();
+
+    // Table row
+    const cells = parseMdTableRow(trimmed);
+    if (cells) {
+      if (!inMdTable) {
+        inMdTable = true;
+        tableHeaders = cells;
+      } else if (isMdSeparator(cells)) {
+        // skip separator row
+      } else {
+        tableBody.push(cells);
+      }
+      continue;
+    }
+
+    if (inMdTable) flushMdTable();
+
+    // Horizontal rule
+    if (/^-{3,}$/.test(trimmed) || /^\*{3,}$/.test(trimmed) || /^_{3,}$/.test(trimmed)) {
+      checkPageBreak(6);
+      doc.setDrawColor(...COLORS.border);
+      doc.line(margin, y, pageWidth - margin, y);
+      y += 4;
+      continue;
+    }
+
+    // H1
+    if (trimmed.startsWith('# ') && !trimmed.startsWith('## ')) {
+      pdfSectionTitle(trimmed.slice(2));
+      continue;
+    }
+    // H2
+    if (trimmed.startsWith('## ') && !trimmed.startsWith('### ')) {
+      pdfSectionTitle(trimmed.slice(3));
+      continue;
+    }
+    // H3
+    if (trimmed.startsWith('### ')) {
+      pdfSubTitle(trimmed.slice(4));
+      continue;
+    }
+
+    // Bullet
+    if (/^[-*•]\s/.test(trimmed)) {
+      pdfBullet(trimmed.slice(2));
+      continue;
+    }
+
+    // Numbered list
+    if (/^\d+[\.\)]\s/.test(trimmed)) {
+      pdfBullet(trimmed.replace(/^\d+[\.\)]\s/, ''));
+      continue;
+    }
+
+    // Empty line
+    if (trimmed === '') {
+      y += 2;
+      continue;
+    }
+
+    // Paragraph
+    pdfText(trimmed);
+  }
+
+  if (inMdTable) flushMdTable();
+
+  // End of report
+  y += 5;
+  doc.setFontSize(7);
+  doc.setTextColor(...COLORS.textMuted);
+  doc.text('End of report.', pageWidth / 2, y, { align: 'center' });
+
+  // Page numbers
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    drawFooter(i, totalPages);
+  }
+
+  doc.save(`PICO_Intelligence_Report_${new Date(date).toISOString().slice(0, 10)}.pdf`);
+}
