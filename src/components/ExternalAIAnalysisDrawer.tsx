@@ -122,7 +122,7 @@ export function ExternalAIAnalysisDrawer({ source, getPayload, disabled }: Exter
         setError('El servicio de IA no respondió a tiempo.');
         setErrorSource('timeout');
       } else if (err.message?.includes('network') || err.message?.includes('fetch')) {
-        setError('Error de red al conectar con el servicio de IA externa.');
+        setError('Error de red al conectar con el servicio de IA.');
         setErrorSource('network');
       } else {
         setError(err.message || 'Error desconocido al analizar');
