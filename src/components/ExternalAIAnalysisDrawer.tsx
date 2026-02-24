@@ -325,7 +325,7 @@ export function ExternalAIAnalysisDrawer({ source, getPayload, disabled }: Exter
               disabled={disabled}
             >
               <Brain className="h-4 w-4 mr-2" />
-              Analizar con IA externa
+              Analizar con IA
             </Button>
           </TooltipTrigger>
           {isConfigured === false && (
