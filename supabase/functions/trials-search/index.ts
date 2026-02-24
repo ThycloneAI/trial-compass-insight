@@ -271,6 +271,11 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Fallback: if API returned totalCount=0 but we have trials, use actual count
+    if (totalCount === 0 && allTrials.length > 0) {
+      totalCount = allTrials.length
+    }
+
     const result = {
       totalCount,
       trials: allTrials,

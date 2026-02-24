@@ -143,6 +143,31 @@ function hashPayload(payload: any, mode: string, userInstructions: string): stri
   return `external_ai_${Math.abs(hash).toString(16)}`;
 }
 
+// Trim payload to reduce token count for AI analysis
+function trimPayloadForAI(payload: any): any {
+  if (!payload?.data || !Array.isArray(payload.data)) return payload;
+  
+  const trimmed = {
+    ...payload,
+    data: payload.data.map((trial: any) => ({
+      nctId: trial.nctId,
+      briefTitle: trial.briefTitle,
+      phase: trial.phase,
+      overallStatus: trial.overallStatus,
+      conditions: trial.conditions,
+      arms: trial.arms,
+      interventions: trial.interventions,
+      primaryOutcomes: trial.primaryOutcomes,
+      enrollmentCount: trial.enrollmentCount,
+      briefSummary: trial.briefSummary ? trial.briefSummary.slice(0, 200) : undefined,
+      secondaryOutcomes: Array.isArray(trial.secondaryOutcomes) 
+        ? trial.secondaryOutcomes.map((o: any) => ({ measure: o.measure, timeFrame: o.timeFrame }))
+        : undefined,
+    }))
+  };
+  return trimmed;
+}
+
 // Detect if URL is Anthropic API
 function isAnthropicAPI(url: string): boolean {
   return url.includes('api.anthropic.com');
@@ -156,7 +181,7 @@ function buildAnthropicRequest(
   userInstructions: string,
   payload: any
 ): { headers: Record<string, string>; body: string } {
-  const maxTokens = mode === 'advanced' ? 3000 : 1500;
+  const maxTokens = mode === 'advanced' ? 4096 : 1500;
   
   // Build the user message content
   let userContent = RESIDENT_PROMPT;
@@ -249,7 +274,7 @@ Deno.serve(async (req) => {
     const EXTERNAL_AI_URL = Deno.env.get('EXTERNAL_AI_URL');
     const EXTERNAL_AI_KEY = Deno.env.get('EXTERNAL_AI_KEY');
     const EXTERNAL_AI_MODEL = Deno.env.get('EXTERNAL_AI_MODEL') || 'claude-sonnet-4-5';
-    const EXTERNAL_AI_TIMEOUT_MS = parseInt(Deno.env.get('EXTERNAL_AI_TIMEOUT_MS') || '60000');
+    const EXTERNAL_AI_TIMEOUT_MS = parseInt(Deno.env.get('EXTERNAL_AI_TIMEOUT_MS') || '120000');
     const EXTERNAL_AI_NAME = Deno.env.get('EXTERNAL_AI_NAME') || 'IA Externa';
     
     // Parse and validate request body
@@ -386,15 +411,18 @@ Deno.serve(async (req) => {
       window_start: new Date().toISOString()
     }, { onConflict: 'ip_address,endpoint' });
 
+    // Trim payload to reduce token count
+    const trimmedPayload = trimPayloadForAI(payload);
+
     // Detect provider and build request accordingly
     const isAnthropic = isAnthropicAPI(EXTERNAL_AI_URL);
     let requestConfig: { headers: Record<string, string>; body: string };
     
     if (isAnthropic) {
-      requestConfig = buildAnthropicRequest(EXTERNAL_AI_KEY, EXTERNAL_AI_MODEL, mode, sanitizedInstructions, payload);
+      requestConfig = buildAnthropicRequest(EXTERNAL_AI_KEY, EXTERNAL_AI_MODEL, mode, sanitizedInstructions, trimmedPayload);
       log.info('calling_anthropic', { model: EXTERNAL_AI_MODEL, mode });
     } else {
-      requestConfig = buildGenericRequest(EXTERNAL_AI_KEY, mode, sanitizedInstructions, source, payload);
+      requestConfig = buildGenericRequest(EXTERNAL_AI_KEY, mode, sanitizedInstructions, source, trimmedPayload);
       log.info('calling_generic_ai', { mode });
     }
 
