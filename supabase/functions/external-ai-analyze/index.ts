@@ -203,12 +203,14 @@ function hashPayload(payload: any, mode: string, userInstructions: string): stri
 function trimPayloadForAI(payload: any): any {
   if (!payload?.data || !Array.isArray(payload.data)) return payload;
   
+  // Cap at 50 trials max
+  const trials = payload.data.slice(0, 50);
+  
   const trimmed = {
     ...payload,
-    data: payload.data.map((trial: any) => ({
+    data: trials.map((trial: any) => ({
       nctId: trial.nctId,
       briefTitle: trial.briefTitle,
-      officialTitle: trial.officialTitle,
       phase: trial.phase,
       overallStatus: trial.overallStatus,
       studyType: trial.studyType,
@@ -220,9 +222,9 @@ function trimPayloadForAI(payload: any): any {
       leadSponsor: trial.leadSponsor,
       startDate: trial.startDate,
       completionDate: trial.completionDate,
-      briefSummary: trial.briefSummary ? trial.briefSummary.slice(0, 200) : undefined,
+      // Drop briefSummary and officialTitle to save tokens
       secondaryOutcomes: Array.isArray(trial.secondaryOutcomes) 
-        ? trial.secondaryOutcomes.map((o: any) => ({ measure: o.measure, timeFrame: o.timeFrame, classification: o.classification }))
+        ? trial.secondaryOutcomes.map((o: any) => ({ measure: o.measure }))
         : undefined,
     }))
   };
