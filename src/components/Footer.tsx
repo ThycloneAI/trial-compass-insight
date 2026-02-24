@@ -4,7 +4,7 @@ export function Footer() {
   return (
     <footer className="w-full border-t border-border bg-background py-6 mt-auto">
       <div className="container flex flex-col sm:flex-row items-center justify-center gap-2 text-sm text-muted-foreground">
-        <span>Comparator & Endpoint Finder is an experimental project by</span>
+        <span>A project by</span>
         <a
           href="https://www.thycl.one"
           target="_blank"
