@@ -413,28 +413,43 @@ export async function checkExternalAIConfigured(): Promise<{ configured: boolean
 export async function analyzeWithExternalAI(
   request: ExternalAIAnalysisRequest
 ): Promise<ExternalAIAnalysisResult> {
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/external-ai-analyze`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(request),
+  const CLIENT_TIMEOUT_MS = 130_000; // 130 seconds
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), CLIENT_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/external-ai-analyze`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+        signal: controller.signal,
+      }
+    );
+
+    clearTimeout(timeoutId);
+    const data = await response.json();
+
+    if (!response.ok) {
+      const error = new Error(data.message || data.error || 'Failed to analyze with external AI') as any;
+      error.status = response.status;
+      error.errorSource = data.errorSource || 'unknown';
+      error.externalErrorSnippet = data.externalErrorSnippet;
+      throw error;
     }
-  );
 
-  const data = await response.json();
-
-  if (!response.ok) {
-    // Enhanced error with status and source
-    const error = new Error(data.message || data.error || 'Failed to analyze with external AI') as any;
-    error.status = response.status;
-    error.errorSource = data.errorSource || 'unknown';
-    error.externalErrorSnippet = data.externalErrorSnippet;
-    throw error;
+    return data;
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      const error = new Error('La solicitud ha superado los 2 minutos. Intente con modo básico o menos ensayos.') as any;
+      error.errorSource = 'timeout';
+      throw error;
+    }
+    throw err;
   }
-
-  return data;
 }

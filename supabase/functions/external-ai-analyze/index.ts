@@ -626,11 +626,12 @@ Deno.serve(async (req) => {
       analysisText,
       analysisJson,
       aiName: EXTERNAL_AI_NAME,
-      model: isAnthropic ? EXTERNAL_AI_MODEL : undefined,
+      model: usedModel,
+      usedFallback,
       userInstructionsUsed: sanitizedInstructions || null,
       trace: {
         calledAt: new Date().toISOString(),
-        endpoint: EXTERNAL_AI_URL.replace(/\/[^/]*$/, '/***'), // Mask last path segment for security
+        endpoint: usedFallback ? 'lovable-ai-gateway/***' : EXTERNAL_AI_URL.replace(/\/[^/]*$/, '/***'),
         status: externalStatus,
         durationMs
       }

@@ -20,6 +20,41 @@ interface ExternalAIAnalysisDrawerProps {
   disabled?: boolean;
 }
 
+function AnalysisLoadingIndicator({ mode }: { mode: 'basic' | 'advanced' }) {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => setElapsed(s => s + 1), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const getProgressMessage = () => {
+    if (elapsed < 5) return 'Conectando con IA...';
+    if (elapsed < 20) return 'Procesando datos clínicos...';
+    if (elapsed < 45) return 'Generando informe PICO...';
+    if (elapsed < 70) return 'Refinando análisis...';
+    return 'Casi listo, finalizando...';
+  };
+
+  const estimatedTime = mode === 'basic' ? '30-60s' : '60-90s';
+
+  return (
+    <div className="flex flex-col items-center justify-center py-16">
+      <Loader2 className="h-12 w-12 animate-spin text-primary mb-6" />
+      <p className="text-lg text-foreground font-medium">{getProgressMessage()}</p>
+      <p className="text-2xl font-mono text-primary mt-3">{elapsed}s</p>
+      <p className="text-sm text-muted-foreground mt-3">
+        Tiempo estimado: ~{estimatedTime}
+      </p>
+      {elapsed > 60 && (
+        <p className="text-xs text-muted-foreground mt-2 text-center max-w-xs">
+          Si el proveedor principal tarda demasiado, se intentará automáticamente con un modelo alternativo.
+        </p>
+      )}
+    </div>
+  );
+}
+
 type AnalysisStatus = 'idle' | 'config_check' | 'ready_to_run' | 'sending' | 'complete' | 'error';
 
 export function ExternalAIAnalysisDrawer({ source, getPayload, disabled }: ExternalAIAnalysisDrawerProps) {
