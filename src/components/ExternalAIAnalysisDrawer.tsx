@@ -59,7 +59,7 @@ export function ExternalAIAnalysisDrawer({ source, getPayload, disabled }: Exter
     } catch {
       setIsConfigured(false);
       setStatus('error');
-      setError('No se pudo verificar la configuración del servicio de IA externa.');
+      setError('No se pudo verificar la configuración del servicio de IA.');
       setErrorSource('configuration');
     }
   };
