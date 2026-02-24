@@ -348,7 +348,7 @@ export function ExternalAIAnalysisDrawer({ source, getPayload, disabled }: Exter
                     <DialogTitle className="text-xl font-semibold">
                       Análisis IA – PICO (Comparadores y Endpoints)
                     </DialogTitle>
-                    {displayAiName && displayAiName !== 'IA Externa' && (
+                    {displayAiName && displayAiName !== 'IA' && (
                       <DialogDescription className="text-sm mt-0.5">
                         Servicio: {displayAiName}
                       </DialogDescription>
