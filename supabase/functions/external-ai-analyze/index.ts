@@ -242,7 +242,7 @@ function buildAnthropicRequest(
   userInstructions: string,
   payload: any
 ): { headers: Record<string, string>; body: string } {
-  const maxTokens = mode === 'advanced' ? 4096 : 1500;
+  const maxTokens = mode === 'advanced' ? 8192 : 2500;
   
   // Build the user message content
   let userContent = RESIDENT_PROMPT;
