@@ -116,7 +116,7 @@ export function ExternalAIAnalysisDrawer({ source, getPayload, disabled }: Exter
         } else if (errSource === 'payload_size') {
           setError(err.message || 'El payload es demasiado grande.');
         } else {
-          setError(err.message || `Error del servicio de IA externa`);
+          setError(err.message || `Error del servicio de IA`);
         }
       } else if (err.message?.includes('timeout')) {
         setError('El servicio de IA externa no respondió a tiempo.');
