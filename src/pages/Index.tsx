@@ -81,9 +81,6 @@ const Index = () => {
         {/* Hero Section */}
         {!results && (
           <div className="mb-12 text-center animate-fade-in">
-            <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-destructive">
-              Proyecto experimental
-            </div>
             <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-primary/10 mb-6">
               <FlaskConical className="h-10 w-10 text-primary" />
             </div>

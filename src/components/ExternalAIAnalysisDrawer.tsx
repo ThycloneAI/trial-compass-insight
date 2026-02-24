@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Brain, Copy, Check, ChevronDown, ChevronUp, Loader2, AlertCircle, Clock, Globe, Play, X, Download } from "lucide-react";
+import { Brain, Copy, Check, ChevronDown, ChevronUp, Loader2, AlertCircle, Clock, Globe, Play, X, Download, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import { analyzeWithExternalAI, ExternalAIAnalysisResult, checkExternalAIConfigured } from "@/lib/api";
+import { generateAnalysisPdfReport } from "@/lib/pdfReport";
 
 interface ExternalAIAnalysisDrawerProps {
   source: 'pubmed_json' | 'trial_json' | 'custom';
@@ -53,13 +54,13 @@ export function ExternalAIAnalysisDrawer({ source, getPayload, disabled }: Exter
         setStatus('ready_to_run');
       } else {
         setStatus('error');
-        setError('Servicio de IA externa no configurado. Configure EXTERNAL_AI_URL y EXTERNAL_AI_KEY en las variables de entorno.');
+        setError('Servicio de IA no configurado. Configure EXTERNAL_AI_URL y EXTERNAL_AI_KEY en las variables de entorno.');
         setErrorSource('configuration');
       }
     } catch {
       setIsConfigured(false);
       setStatus('error');
-      setError('No se pudo verificar la configuración del servicio de IA externa.');
+      setError('No se pudo verificar la configuración del servicio de IA.');
       setErrorSource('configuration');
     }
   };
@@ -108,21 +109,21 @@ export function ExternalAIAnalysisDrawer({ source, getPayload, disabled }: Exter
       if (errSource) {
         setErrorSource(errSource);
         if (errSource === 'timeout') {
-          setError('El servicio de IA externa no respondió a tiempo.');
+          setError('El servicio de IA no respondió a tiempo.');
         } else if (errSource === 'network') {
-          setError('Error de red al conectar con el servicio de IA externa.');
+          setError('Error de red al conectar con el servicio de IA.');
         } else if (errSource === 'rate_limit') {
           setError('Límite de peticiones excedido. Espere antes de reintentar.');
         } else if (errSource === 'payload_size') {
           setError(err.message || 'El payload es demasiado grande.');
         } else {
-          setError(err.message || `Error del servicio de IA externa`);
+          setError(err.message || `Error del servicio de IA`);
         }
       } else if (err.message?.includes('timeout')) {
-        setError('El servicio de IA externa no respondió a tiempo.');
+        setError('El servicio de IA no respondió a tiempo.');
         setErrorSource('timeout');
       } else if (err.message?.includes('network') || err.message?.includes('fetch')) {
-        setError('Error de red al conectar con el servicio de IA externa.');
+        setError('Error de red al conectar con el servicio de IA.');
         setErrorSource('network');
       } else {
         setError(err.message || 'Error desconocido al analizar');
@@ -152,6 +153,24 @@ export function ExternalAIAnalysisDrawer({ source, getPayload, disabled }: Exter
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       toast.success('Análisis descargado');
+    }
+  };
+
+  const handleDownloadPdf = () => {
+    if (result?.analysisText) {
+      try {
+        generateAnalysisPdfReport({
+          analysisText: result.analysisText,
+          aiName: displayAiName,
+          model: result.model,
+          date: new Date().toISOString(),
+          trialCount: sentPayload?.data?.length || 0,
+        });
+        toast.success('PDF generado');
+      } catch (err) {
+        console.error('PDF generation error:', err);
+        toast.error('Error al generar PDF');
+      }
     }
   };
 
@@ -185,6 +204,8 @@ export function ExternalAIAnalysisDrawer({ source, getPayload, disabled }: Exter
     let listItems: JSX.Element[] = [];
     let inList = false;
     let listType: 'ul' | 'ol' = 'ul';
+    let tableRows: string[][] = [];
+    let inTable = false;
 
     const flushList = () => {
       if (listItems.length > 0) {
@@ -198,9 +219,78 @@ export function ExternalAIAnalysisDrawer({ source, getPayload, disabled }: Exter
       }
     };
 
+    const flushTable = () => {
+      if (tableRows.length > 0) {
+        const headerRow = tableRows[0];
+        const bodyRows = tableRows.slice(1);
+        elements.push(
+          <div key={`table-${elements.length}`} className="my-4 overflow-x-auto rounded-lg border border-border">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-muted/70">
+                  {headerRow.map((cell, ci) => (
+                    <th key={ci} className="px-3 py-2 text-left font-semibold text-foreground border-b border-border whitespace-nowrap"
+                      dangerouslySetInnerHTML={{ __html: cell.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {bodyRows.map((row, ri) => (
+                  <tr key={ri} className={ri % 2 === 0 ? 'bg-background' : 'bg-muted/30'}>
+                    {row.map((cell, ci) => (
+                      <td key={ci} className="px-3 py-1.5 text-muted-foreground border-b border-border/50"
+                        dangerouslySetInnerHTML={{ __html: cell.replace(/\*\*(.*?)\*\*/g, '<strong class="text-foreground">$1</strong>') }} />
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+        tableRows = [];
+        inTable = false;
+      }
+    };
+
+    const parseTableRow = (line: string): string[] | null => {
+      if (!line.trim().startsWith('|') || !line.trim().endsWith('|')) return null;
+      const cells = line.trim().slice(1, -1).split('|').map(c => c.trim());
+      return cells;
+    };
+
+    const isSeparatorRow = (cells: string[]): boolean => {
+      return cells.every(c => /^[-:]+$/.test(c.trim()));
+    };
+
     lines.forEach((line, i) => {
       const trimmedLine = line.trim();
-      
+
+      // Table rows
+      const tableCells = parseTableRow(trimmedLine);
+      if (tableCells) {
+        flushList();
+        if (!inTable) {
+          inTable = true;
+          tableRows = [];
+        }
+        if (!isSeparatorRow(tableCells)) {
+          tableRows.push(tableCells);
+        }
+        return;
+      }
+
+      // End table if we were in one
+      if (inTable) {
+        flushTable();
+      }
+
+      // Horizontal rule
+      if (/^-{3,}$/.test(trimmedLine) || /^\*{3,}$/.test(trimmedLine) || /^_{3,}$/.test(trimmedLine)) {
+        flushList();
+        elements.push(<Separator key={i} className="my-6" />);
+        return;
+      }
+
       // Headers
       if (trimmedLine.startsWith('### ')) {
         flushList();
@@ -277,6 +367,7 @@ export function ExternalAIAnalysisDrawer({ source, getPayload, disabled }: Exter
     });
 
     flushList();
+    flushTable();
     return elements;
   };
 
@@ -311,7 +402,7 @@ export function ExternalAIAnalysisDrawer({ source, getPayload, disabled }: Exter
     }
   };
 
-  const displayAiName = result?.aiName || aiName || 'IA Externa';
+  const displayAiName = result?.aiName || aiName || 'IA';
 
   return (
     <>
@@ -325,7 +416,7 @@ export function ExternalAIAnalysisDrawer({ source, getPayload, disabled }: Exter
               disabled={disabled}
             >
               <Brain className="h-4 w-4 mr-2" />
-              Analizar con IA externa
+              Analizar con IA
             </Button>
           </TooltipTrigger>
           {isConfigured === false && (
@@ -348,7 +439,7 @@ export function ExternalAIAnalysisDrawer({ source, getPayload, disabled }: Exter
                     <DialogTitle className="text-xl font-semibold">
                       Análisis IA – PICO (Comparadores y Endpoints)
                     </DialogTitle>
-                    {displayAiName && displayAiName !== 'IA Externa' && (
+                    {displayAiName && displayAiName !== 'IA' && (
                       <DialogDescription className="text-sm mt-0.5">
                         Servicio: {displayAiName}
                       </DialogDescription>
@@ -370,7 +461,11 @@ export function ExternalAIAnalysisDrawer({ source, getPayload, disabled }: Exter
                 </Button>
                 <Button variant="outline" size="sm" onClick={handleDownloadAnalysis}>
                   <Download className="h-4 w-4 mr-1" />
-                  Descargar análisis (.md)
+                  Descargar .md
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleDownloadPdf}>
+                  <FileText className="h-4 w-4 mr-1" />
+                  Descargar PDF
                 </Button>
                 <Button variant="outline" size="sm" onClick={handleCopyJson}>
                   {copiedJson ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
@@ -378,7 +473,7 @@ export function ExternalAIAnalysisDrawer({ source, getPayload, disabled }: Exter
                 </Button>
                 <Button variant="outline" size="sm" onClick={handleDownloadJson}>
                   <Download className="h-4 w-4 mr-1" />
-                  Descargar JSON (.json)
+                  Descargar JSON
                 </Button>
               </div>
             )}
@@ -473,8 +568,8 @@ export function ExternalAIAnalysisDrawer({ source, getPayload, disabled }: Exter
               {status === 'sending' && (
                 <div className="flex flex-col items-center justify-center py-16">
                   <Loader2 className="h-12 w-12 animate-spin text-primary mb-6" />
-                  <p className="text-lg text-muted-foreground">Analizando con IA externa...</p>
-                  <p className="text-sm text-muted-foreground mt-2">Esto puede tomar hasta 30 segundos</p>
+                  <p className="text-lg text-muted-foreground">Analizando con IA...</p>
+                  <p className="text-sm text-muted-foreground mt-2">Esto puede tomar hasta 2 minutos</p>
                 </div>
               )}
 

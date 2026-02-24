@@ -373,6 +373,7 @@ export interface ExternalAIAnalysisResult {
   analysisText: string;
   analysisJson?: any;
   aiName?: string;
+  model?: string;
   cached?: boolean;
   cachedAt?: string;
   userInstructionsUsed?: string | null;
