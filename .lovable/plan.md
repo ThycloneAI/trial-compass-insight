@@ -1,130 +1,63 @@
 
 
-# Enrich AI Analysis: Expert-Level Prompt, Richer Data, Better Presentation, and PDF Export
+# Improve AI Analysis Speed and Reliability
 
-## Overview
+## Problem Analysis
 
-This plan upgrades the AI analysis feature to produce intelligence-grade reports with richer data layers, expert-level prompting, professional UI presentation, and proper PDF export. It also removes "externa" references and the "Proyecto experimental" label from the homepage.
+From the logs, the basic mode analysis took **45 seconds** and advanced mode sometimes exceeds the 120s timeout. Root causes:
 
----
+1. **Claude Sonnet 4.5 is slow** for large payloads with a 188-line prompt + full trial JSON
+2. **No fallback** -- if Claude is slow or fails, the request just times out
+3. **No progress feedback** -- user sees a static spinner with no indication of progress
+4. **Payload still too large** -- `briefSummary` (200 chars x 48 trials) and `secondaryOutcomes` add unnecessary tokens
 
-## 1. Cosmetic / Labeling Changes
+## Solution
 
-### 1.1 Remove "Proyecto experimental" from homepage
-- **File:** `src/pages/Index.tsx` -- Remove the `<div>` at line 84-86 that shows "Proyecto experimental".
-
-### 1.2 Remove "externa" from AI references
-- **File:** `src/components/ExternalAIAnalysisDrawer.tsx`:
-  - Button text: "Analizar con IA externa" --> "Analizar con IA"
-  - Dialog title: keep "Analisis IA -- PICO (Comparadores y Endpoints)"
-  - All error messages: replace "IA externa" with "IA"
-  - Loading text: "Analizando con IA externa..." --> "Analizando con IA..."
-  - `displayAiName` fallback: 'IA Externa' --> 'IA'
-- **File:** `src/components/TrialResultsList.tsx`: no changes needed (uses component as-is).
-- **File:** `supabase/functions/external-ai-analyze/index.ts`: Change `EXTERNAL_AI_NAME` default from `'IA Externa'` to `'IA'`.
-
-### 1.3 Remove "experimental" from Footer
-- **File:** `src/components/Footer.tsx` -- Change "is an experimental project by" to "A project by".
-
----
-
-## 2. Enrich the Data Sent to the AI (trimPayloadForAI)
+### 1. Add Lovable AI Gateway as fast fallback (Edge Function)
 
 **File:** `supabase/functions/external-ai-analyze/index.ts`
 
-Currently the `trimPayloadForAI` function strips too aggressively. Add these fields back to the trimmed payload for each trial:
+When the Anthropic call exceeds **60 seconds**, abort it and automatically retry with the Lovable AI Gateway (Gemini 2.5 Flash), which is much faster. This uses `LOVABLE_API_KEY` (already available as a built-in secret).
 
-- `leadSponsor` -- for sponsor landscape analysis
-- `startDate`, `completionDate` -- for timeline analysis
-- `studyType` -- interventional vs observational
-- `enrollmentCount` -- already included
-- `officialTitle` -- useful for precise drug/intervention names
-- `secondaryOutcomes` -- keep measure + timeFrame (already done), also keep `classification`
+```text
+Flow:
+  Claude (60s timeout) --[timeout]--> Gemini 2.5 Flash (60s timeout) --[timeout]--> Error
+                       --[success]--> Return result
+```
 
-This gives the AI enough data for geographic sponsor analysis, timeline patterns, and enrollment scale without bloating the payload.
+- First attempt: Claude with 60s timeout
+- If timeout: automatic fallback to Gemini via Lovable gateway with 60s timeout
+- Response includes which model actually served the request
 
----
+### 2. More aggressive payload trimming (Edge Function)
 
-## 3. Expert-Level Prompt Enrichment
+**File:** `supabase/functions/external-ai-analyze/index.ts`
 
-**File:** `supabase/functions/external-ai-analyze/index.ts` -- Rewrite `RESIDENT_PROMPT`
+- Remove `briefSummary` entirely (it adds no PICO value beyond what `conditions` + `arms` provide)
+- Remove `officialTitle` (redundant with `briefTitle`)
+- For `secondaryOutcomes`: keep only `measure` (drop `timeFrame` and `classification` to save tokens)
+- Limit trials to max 50 in the payload sent to AI
 
-The enhanced prompt will add these analytical dimensions:
-
-### New sections in the output structure:
-1. **Executive Summary** (enhanced: include trial count, phase distribution, sponsor diversity)
-2. **PICO -- Population (P)** -- Conditions targeted, enrollment scale distribution, healthy volunteers (if data available)
-3. **PICO -- Intervention (I)** -- Intervention types, mechanisms, dosing patterns extracted from arm descriptions
-4. **PICO -- Comparator (C)** -- (existing, enhanced with sponsor context)
-5. **PICO -- Outcomes (O)** -- (existing, enhanced)
-6. **Trial Landscape Overview** (NEW):
-   - Phase distribution table
-   - Status distribution (recruiting/completed/terminated)
-   - Sponsor landscape (unique sponsors, industry vs academic)
-   - Timeline analysis (date ranges, duration patterns)
-   - Enrollment scale analysis
-7. **Methodological Observations** (enhanced)
-8. **Traceability** (enhanced)
-
-### New mandatory tables:
-- **Table C: Trial Landscape Summary** -- NCT | Phase | Status | Sponsor | Enrollment | Start Date
-- **Table D: Intervention Mapping** -- NCT | Intervention(s) | Type | Mechanism/Class (if inferable)
-
-### Enhanced formatting rules:
-- Use horizontal rules between major sections
-- Executive summary must be 4-8 lines, quantified (e.g., "25 trials analyzed, 60% Phase 3, 4 unique sponsors")
-- Tables must include all trials, not just examples
-- Advanced mode: add sub-analysis by phase grouping
-
----
-
-## 4. Improve the Analysis Results Presentation (UI)
+### 3. Add elapsed time indicator in UI
 
 **File:** `src/components/ExternalAIAnalysisDrawer.tsx`
 
-### 4.1 Enhanced Markdown Renderer
-The current `renderMarkdown` function is basic. Enhance it to support:
-- **Tables** -- Parse markdown `| col1 | col2 |` syntax and render as proper HTML tables with styling (striped rows, borders, header highlighting)
-- **Horizontal rules** (`---`) -- render as `<Separator />`
-- **Nested bold/italic** inside table cells
-- Better spacing between sections
+- Show a live elapsed timer during analysis: "Analizando... 15s"
+- Add a progress message that updates: "Conectando con IA..." -> "Procesando datos..." -> "Generando informe..."
+- Show estimated time based on mode: "Tiempo estimado: ~30-60s (basico) / ~60-90s (avanzado)"
 
-### 4.2 PDF Export Button
-Add a "Download PDF" button alongside the existing "Download .md" button. This will:
-- Convert the analysis markdown text into a professional jsPDF document
-- Use the same visual style as the existing `pdfReport.ts` (blue headers, grid tables, page numbers)
-- Parse the markdown to extract sections, tables, and text blocks
-- Render tables as proper `autoTable` grids in the PDF
+### 4. Client-side timeout with retry option
 
-### 4.3 New helper: `generateAnalysisPdfReport`
-**New section in:** `src/lib/pdfReport.ts` (or a new function exported from it)
+**File:** `src/lib/api.ts`
 
-This function receives the analysis text (markdown string) and metadata (date, AI name, model, trial count) and produces a professional PDF:
-- Cover page with "PICO Intelligence Report" title, date, model info
-- Parse markdown headings into PDF section titles
-- Parse markdown tables into `autoTable` calls
-- Parse bullet lists into formatted PDF lists
-- Parse bold text
-- Page headers/footers with branding
-- Disclaimer about AI-generated content
+- Add `AbortController` with 130s client-side timeout to the `analyzeWithExternalAI` function
+- On timeout, throw a clear error so the UI can offer a "Reintentar" button
 
----
-
-## 5. Increase max_tokens for Advanced Mode
-
-**File:** `supabase/functions/external-ai-analyze/index.ts`
-- Advanced mode: increase from 4096 to 8192 to accommodate the richer output structure
-- Basic mode: increase from 1500 to 2500
-
----
-
-## Summary of Files to Modify
+## Technical Summary
 
 | File | Changes |
 |------|---------|
-| `src/pages/Index.tsx` | Remove "Proyecto experimental" label |
-| `src/components/Footer.tsx` | Remove "experimental" wording |
-| `src/components/ExternalAIAnalysisDrawer.tsx` | Remove "externa", add table rendering in markdown, add PDF download button |
-| `supabase/functions/external-ai-analyze/index.ts` | Enrich prompt, enrich trimmed payload, increase max_tokens, change default AI name |
-| `src/lib/pdfReport.ts` | Add `generateAnalysisPdfReport` function for AI analysis PDF export |
+| `supabase/functions/external-ai-analyze/index.ts` | Add Gemini fallback on timeout, trim payload more aggressively, reduce Claude timeout to 60s |
+| `src/components/ExternalAIAnalysisDrawer.tsx` | Add elapsed time counter, progress messages, estimated time display |
+| `src/lib/api.ts` | Add client-side AbortController timeout (130s) |
 
