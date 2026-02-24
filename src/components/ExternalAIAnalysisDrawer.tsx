@@ -311,7 +311,7 @@ export function ExternalAIAnalysisDrawer({ source, getPayload, disabled }: Exter
     }
   };
 
-  const displayAiName = result?.aiName || aiName || 'IA Externa';
+  const displayAiName = result?.aiName || aiName || 'IA';
 
   return (
     <>
