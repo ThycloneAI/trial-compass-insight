@@ -291,7 +291,7 @@ Deno.serve(async (req) => {
       indication: condition || null,
       biomarker: biomarker || null,
       filters_json: { phase, status, studyType, minDate, maxDate, maxResults, searchMode }
-    }).then(() => {}).catch(() => {})
+    }).then(() => {})
 
     // Cache the result
     await supabase.from('trial_cache').upsert({
