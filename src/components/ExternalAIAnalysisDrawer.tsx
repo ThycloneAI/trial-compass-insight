@@ -53,7 +53,7 @@ export function ExternalAIAnalysisDrawer({ source, getPayload, disabled }: Exter
         setStatus('ready_to_run');
       } else {
         setStatus('error');
-        setError('Servicio de IA externa no configurado. Configure EXTERNAL_AI_URL y EXTERNAL_AI_KEY en las variables de entorno.');
+        setError('Servicio de IA no configurado. Configure EXTERNAL_AI_URL y EXTERNAL_AI_KEY en las variables de entorno.');
         setErrorSource('configuration');
       }
     } catch {
