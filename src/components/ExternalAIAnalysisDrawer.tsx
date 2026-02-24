@@ -461,7 +461,11 @@ export function ExternalAIAnalysisDrawer({ source, getPayload, disabled }: Exter
                 </Button>
                 <Button variant="outline" size="sm" onClick={handleDownloadAnalysis}>
                   <Download className="h-4 w-4 mr-1" />
-                  Descargar análisis (.md)
+                  Descargar .md
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleDownloadPdf}>
+                  <FileText className="h-4 w-4 mr-1" />
+                  Descargar PDF
                 </Button>
                 <Button variant="outline" size="sm" onClick={handleCopyJson}>
                   {copiedJson ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
@@ -469,7 +473,7 @@ export function ExternalAIAnalysisDrawer({ source, getPayload, disabled }: Exter
                 </Button>
                 <Button variant="outline" size="sm" onClick={handleDownloadJson}>
                   <Download className="h-4 w-4 mr-1" />
-                  Descargar JSON (.json)
+                  Descargar JSON
                 </Button>
               </div>
             )}
