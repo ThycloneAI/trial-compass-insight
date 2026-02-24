@@ -1,0 +1,19 @@
+project_id = "licxjczmaflcianaruwz"
+
+[functions.trials-search]
+verify_jwt = false
+
+[functions.trial-detail]
+verify_jwt = false
+
+[functions.pubmed-search]
+verify_jwt = false
+
+[functions.comparator-summary]
+verify_jwt = false
+
+[functions.pico-summary]
+verify_jwt = false
+
+[functions.external-ai-analyze]
+verify_jwt = false
